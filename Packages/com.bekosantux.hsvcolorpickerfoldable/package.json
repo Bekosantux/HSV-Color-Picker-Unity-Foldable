@@ -1,0 +1,14 @@
+{
+  "name": "com.bekosantux.hsvcolorpickerfoldable",
+  "displayName": "HSV Color Picker (Foldable)",
+  "version": "3.3.0-beko.1",
+  "unity": "2022.3",
+  "description": "HSV color picker for Unity UI (foldable customization based on com.judahperez.hsvcolorpicker).",
+  "keywords": [
+    "hsv",
+    "color",
+    "picker",
+    "ui"
+  ],
+  "type": "library"
+}
