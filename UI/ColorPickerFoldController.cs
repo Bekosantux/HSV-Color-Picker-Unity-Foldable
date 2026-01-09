@@ -31,9 +31,29 @@ namespace HSVPicker
         [SerializeField]
         private GameObject[] _foldTargets;
 
+        [Header("Topmost (Optional)")]
+        [Tooltip("展開時に、このRectTransformを最前面描画にする。未設定なら_pickerRootを使う")]
+        [SerializeField]
+        private RectTransform _topmostRoot;
+
+        [Tooltip("展開中だけ Canvas.overrideSorting を有効にして、sortingOrder を上げて最前面表示する")]
+        [SerializeField]
+        private bool _overrideSortingWhileOpen = true;
+
+        [Tooltip("展開中の sortingOrder。前面にしたいCanvasより大きい値にする")]
+        [SerializeField]
+        private int _sortingOrderWhileOpen = 100;
+
+        [Tooltip("展開時に SetAsLastSibling() も呼んで、同一Canvas内でも前に出す（Editor上の並び替えは不要）")]
+        [SerializeField]
+        private bool _setAsLastSiblingWhileOpen = false;
+
         private bool _isOpen = true;
 
         private Canvas _parentCanvas;
+        private Canvas _topmostCanvas;
+        private bool _savedOverrideSorting;
+        private int _savedSortingOrder;
 
         void OnValidate()
         {
@@ -42,6 +62,11 @@ namespace HSVPicker
             if (_pickerRoot == null)
             {
                 _pickerRoot = transform as RectTransform;
+            }
+
+            if (_topmostRoot == null)
+            {
+                _topmostRoot = _pickerRoot;
             }
 
             if (_startOpen){Open();}
@@ -58,6 +83,11 @@ namespace HSVPicker
             if (_pickerRoot == null)
             {
                 _pickerRoot = transform as RectTransform;
+            }
+
+            if (_topmostRoot == null)
+            {
+                _topmostRoot = _pickerRoot;
             }
 
             _parentCanvas = GetComponentInParent<Canvas>();
@@ -97,6 +127,15 @@ namespace HSVPicker
                 GameObject target = _foldTargets[i];
                 if (target == null) continue;
                 target.SetActive(show);
+            }
+
+            if (show)
+            {
+                ApplyTopmostIfNeeded();
+            }
+            else
+            {
+                RestoreTopmostIfNeeded();
             }
         }
 
@@ -151,6 +190,48 @@ namespace HSVPicker
             return _parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay
                 ? null
                 : _parentCanvas.worldCamera;
+        }
+
+        private void ApplyTopmostIfNeeded()
+        {
+            if (_topmostRoot == null) return;
+
+            if (_setAsLastSiblingWhileOpen)
+            {
+                _topmostRoot.SetAsLastSibling();
+            }
+
+            if (!_overrideSortingWhileOpen) return;
+
+            if (_topmostCanvas == null)
+            {
+                _topmostCanvas = _topmostRoot.GetComponent<Canvas>();
+                if (_topmostCanvas == null)
+                {
+                    _topmostCanvas = _topmostRoot.gameObject.AddComponent<Canvas>();
+                }
+
+                _savedOverrideSorting = _topmostCanvas.overrideSorting;
+                _savedSortingOrder = _topmostCanvas.sortingOrder;
+            }
+
+            _topmostCanvas.overrideSorting = true;
+            _topmostCanvas.sortingOrder = _sortingOrderWhileOpen;
+
+            // Raycasterが無いとクリックが抜けるケースがあるため、必要なら追加
+            if (_topmostRoot.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
+            {
+                _topmostRoot.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            }
+        }
+
+        private void RestoreTopmostIfNeeded()
+        {
+            if (_topmostCanvas == null) return;
+            if (!_overrideSortingWhileOpen) return;
+
+            _topmostCanvas.overrideSorting = _savedOverrideSorting;
+            _topmostCanvas.sortingOrder = _savedSortingOrder;
         }
 
         private static bool TryGetPointerDownPosition(out Vector2 screenPos)
