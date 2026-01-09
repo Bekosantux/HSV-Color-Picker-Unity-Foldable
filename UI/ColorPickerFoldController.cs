@@ -1,5 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using System.Collections.Generic;
 
 namespace HSVPicker
 {
@@ -9,11 +11,11 @@ namespace HSVPicker
         public ColorPicker picker;
 
         [Header("Fold UI")]
-        [Tooltip("クリック対象となる色見本(Image)。このオブジェクトに付ける場合は未設定でOK。")]
+        [Tooltip("クリック対象となる色見本(Image)。未設定ならこのオブジェクトのImageを使用")]
         [SerializeField]
         private Image _button;
 
-        [Tooltip("このRectTransform内を" + "\"内側\"" + "とみなして外側クリックで閉じる。未設定ならこのGameObjectのRectTransformを使用")]
+        [Tooltip("このRectTransform外をクリックしたら閉じる。未設定ならこのオブジェクトのRectTransformを使用")]
         [SerializeField]
         private RectTransform _pickerRoot;
 
@@ -27,7 +29,7 @@ namespace HSVPicker
         [SerializeField]
         private bool _closeOnOutsideClick = true;
 
-        [Tooltip("折りたたみ対象のオブジェクト群。閉じると全て非表示、開くと全て表示になります")]
+        [Tooltip("折りたたみ対象のオブジェクト群")]
         [SerializeField]
         private GameObject[] _foldTargets;
 
@@ -43,10 +45,6 @@ namespace HSVPicker
         [Tooltip("展開中の sortingOrder。前面にしたいCanvasより大きい値にする")]
         [SerializeField]
         private int _sortingOrderWhileOpen = 100;
-
-        [Tooltip("展開時に SetAsLastSibling() も呼んで、同一Canvas内でも前に出す（Editor上の並び替えは不要）")]
-        [SerializeField]
-        private bool _setAsLastSiblingWhileOpen = false;
 
         private bool _isOpen = true;
 
@@ -104,7 +102,7 @@ namespace HSVPicker
             if (!TryGetPointerDownPosition(out Vector2 screenPos)) return;
 
             // 1) 色見本クリックでトグル（開く/閉じる）
-            if (IsPointerOnSwatch(screenPos))
+            if (IsTopmostSwatchClick(screenPos))
             {
                 Toggle();
                 return;
@@ -175,6 +173,39 @@ namespace HSVPicker
             return RectTransformUtility.RectangleContainsScreenPoint(swatch, screenPos, cam);
         }
 
+        private readonly List<RaycastResult> _raycastResults = new List<RaycastResult>(16);
+
+        /// <summary>
+        /// Raycast結果で最前面ヒットが自分の色見本の場合のみトグル
+        /// </summary>
+        private bool IsTopmostSwatchClick(Vector2 screenPos)
+        {
+            if (!IsPointerOnSwatch(screenPos)) return false;
+
+            // EventSystemが無い構成ではフォールバック
+            EventSystem es = EventSystem.current;
+            if (es == null) return true;
+
+            _raycastResults.Clear();
+            var ped = new PointerEventData(es) { position = screenPos };
+            es.RaycastAll(ped, _raycastResults);
+            if (_raycastResults.Count == 0) return true;
+
+            // 先頭が最前面のヒット（通常はソート済み）
+            GameObject top = null;
+            for (int i = 0; i < _raycastResults.Count; i++)
+            {
+                if (_raycastResults[i].gameObject == null) continue;
+                top = _raycastResults[i].gameObject;
+                break;
+            }
+            if (top == null) return true;
+            if (_button == null) return false;
+
+            // 自分の色見本（またはその子）にヒットしている場合のみ反応
+            return top.transform == _button.transform || top.transform.IsChildOf(_button.transform);
+        }
+
         private Camera GetUiCamera()
         {
             if (_uiCamera != null) return _uiCamera;
@@ -195,11 +226,6 @@ namespace HSVPicker
         private void ApplyTopmostIfNeeded()
         {
             if (_topmostRoot == null) return;
-
-            if (_setAsLastSiblingWhileOpen)
-            {
-                _topmostRoot.SetAsLastSibling();
-            }
 
             if (!_overrideSortingWhileOpen) return;
 
